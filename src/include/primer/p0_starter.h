@@ -35,12 +35,12 @@ class Matrix {
    * @param cols The number of columns
    *
    */
-  Matrix(int rows, int cols) : rows_{rows}, cols_{cols}, linear_{new T[rows_ * cols_]} {}
+  Matrix(int rows, int cols) : rows_{rows}, cols_{cols}, linear_{new T[rows_ * cols_]{}} {}
 
   /** The number of rows in the matrix */
-  int rows_;
+  int rows_=0;
   /** The number of columns in the matrix */
-  int cols_;
+  int cols_=0;
 
   /**
    * TODO(P0): Allocate the array in the constructor.
@@ -221,19 +221,19 @@ class RowMatrixOperations {
    * @param matrixB Input matrix
    * @return The result of matrix addition
    */
-  static std::unique_ptr<RowMatrix<T>> Add(std::unique_ptr<RowMatrix<T>> matrixA,
-                                           std::unique_ptr<RowMatrix<T>> matrixB) {
+  static std::unique_ptr<RowMatrix<T>> Add(const RowMatrix<T> *matrixA,
+                                           const RowMatrix<T> *matrixB) {
     // TODO(P0): Add implementation
     if (matrixA->GetRowCount() == matrixB->GetRowCount() && matrixA->GetColumnCount() == matrixB->GetColumnCount()) {
       int rows = matrixA->GetRowCount();
       int cols = matrixA->GetColumnCount();
-      std::unique_ptr<RowMatrix<T>> matrix_result{new RowMatrix<T>{rows, cols}};
+      auto sum=std::make_unique<RowMatrix<T>>(rows, cols);
       for (int i = 0; i < rows; i++) {
         for (int j = 0; j < cols; j++) {
-          matrix_result->SetElement(i, j, matrixA->GetElement(i, j) + matrixB->GetElement(i, j));
+          sum->SetElement(i, j, matrixA->GetElement(i, j) + matrixB->GetElement(i, j));
         }
-        return matrix_result;
       }
+      return sum;
     }
     return std::unique_ptr<RowMatrix<T>>(nullptr);
   }
@@ -245,14 +245,14 @@ class RowMatrixOperations {
    * @param matrixB Input matrix
    * @return The result of matrix multiplication
    */
-  static std::unique_ptr<RowMatrix<T>> Multiply(const std::unique_ptr<RowMatrix<T>> *matrixA,
-                                                const std::unique_ptr<RowMatrix<T>> matrixB) {
+  static std::unique_ptr<RowMatrix<T>> Multiply(const RowMatrix<T> *matrixA,
+                                                const RowMatrix<T> *matrixB) {
     // TODO(P0): Add implementation
     if (matrixA->GetColumnCount() == matrixB->GetRowCount()) {
       int rows_a = matrixA->GetRowCount();
       int cols_a = matrixA->GetColumnCount();
       int cols_b = matrixB->GetColumnCount();
-      auto matrix_result = std::make_unique<RowMatrix<T>>{rows_a, cols_b};
+      auto matrix_result = std::make_unique<RowMatrix<T>>(rows_a, cols_b);
       for (int i = 0; i < rows_a; i++) {
         for (int j = 0; j < cols_a; j++) {
           T temp = matrixA->GetElement(i, j);
@@ -274,9 +274,9 @@ class RowMatrixOperations {
    * @param matrixC Input matrix
    * @return The result of general matrix multiply
    */
-  static std::unique_ptr<RowMatrix<T>> GEMM(std::unique_ptr<RowMatrix<T>> matrixA,
-                                            std::unique_ptr<RowMatrix<T>> matrixB,
-                                            std::unique_ptr<RowMatrix<T>> matrixC) {
+  static std::unique_ptr<RowMatrix<T>> GEMM(const RowMatrix<T> *matrixA,
+                                            const RowMatrix<T> *matrixB,
+                                            const RowMatrix<T> *matrixC) {
     // TODO(P0): Add implementation
     auto matrix_multiply_result = Multiply(matrixA, matrixB);
     if (matrix_multiply_result) {
