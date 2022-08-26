@@ -17,8 +17,6 @@
 #include "buffer/buffer_pool_manager.h"
 #include "gtest/gtest.h"
 
-#include "common/logger.h"
-
 namespace bustub {
 
 // NOLINTNEXTLINE
