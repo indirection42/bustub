@@ -224,7 +224,7 @@ auto BufferPoolManagerInstance::DeletePgImp(page_id_t page_id) -> bool {
 
 auto BufferPoolManagerInstance::UnpinPgImp(page_id_t page_id, bool is_dirty) -> bool {
   std::unique_lock lck(latch_);
-  if (page_table_.find(page_id)==page_table_.end()){
+  if (page_table_.find(page_id) == page_table_.end()) {
     return false;
   }
   frame_id_t frame_id = page_table_[page_id];
@@ -238,7 +238,7 @@ auto BufferPoolManagerInstance::UnpinPgImp(page_id_t page_id, bool is_dirty) -> 
   }
   page.RUnlatch();
   page.WLatch();
-  page.is_dirty_ |=is_dirty;
+  page.is_dirty_ |= is_dirty;
   page.pin_count_--;
   if (page.pin_count_ == 0) {
     // LOG_DEBUG("#Instance %d,  Unpin Page: %d in replacer",instance_index_, page_id);
