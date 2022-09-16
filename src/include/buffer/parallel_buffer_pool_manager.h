@@ -94,7 +94,7 @@ class ParallelBufferPoolManager : public BufferPoolManager {
   size_t num_instances_;
   // all pool_size
   size_t pool_size_;
-  size_t start_index_;
+  size_t start_index_ = 0;
   // num_instances buffer_pool
   // std::vector<BufferPoolManagerInstance> buffer_pools_;
   BufferPoolManagerInstance *buffer_pools_;
