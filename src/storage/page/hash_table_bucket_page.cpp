@@ -46,8 +46,7 @@ auto HASH_TABLE_BUCKET_TYPE::Insert(KeyType key, ValueType value, KeyComparator 
     }
   }
   if (insert_idx != -1) {
-    array_[insert_idx].first = key;
-    array_[insert_idx].second = value;
+    array_[insert_idx] = MappingType(key, value);
     SetOccupied(insert_idx);
     SetReadable(insert_idx);
     return true;
@@ -114,8 +113,8 @@ template <typename KeyType, typename ValueType, typename KeyComparator>
 auto HASH_TABLE_BUCKET_TYPE::NumReadable() -> uint32_t {
   uint32_t cnt = 0;
   for (size_t i = 0; i < (BUCKET_ARRAY_SIZE - 1) / 8 + 1; i++) {
-    unsigned int v = readable_[i];  // count the number of bits set in v
-    unsigned int c;                 // c accumulates the total bits set in v
+    unsigned char v = readable_[i];  // count the number of bits set in v
+    unsigned int c;                  // c accumulates the total bits set in v
     for (c = 0; v > 0; c++) {
       v &= v - 1;  // clear the least significant bit set
     }
