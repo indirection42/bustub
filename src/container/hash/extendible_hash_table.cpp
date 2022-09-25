@@ -15,6 +15,7 @@
 #include <utility>
 #include <vector>
 
+#include <fstream>
 #include "common/exception.h"
 #include "common/logger.h"
 #include "common/rid.h"

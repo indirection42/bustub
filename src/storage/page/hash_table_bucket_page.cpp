@@ -106,7 +106,7 @@ void HASH_TABLE_BUCKET_TYPE::SetReadable(uint32_t bucket_idx) {
 template <typename KeyType, typename ValueType, typename KeyComparator>
 auto HASH_TABLE_BUCKET_TYPE::IsFull() -> bool {
   // tombstone means nothing, which means not full
-  return std::all_of(std::begin(readable_), std::end(readable_), [](char x) { return x == static_cast<char>(0xff); });
+  return NumReadable() == BUCKET_ARRAY_SIZE;
 }
 
 template <typename KeyType, typename ValueType, typename KeyComparator>
