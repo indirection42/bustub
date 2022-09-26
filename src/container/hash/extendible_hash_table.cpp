@@ -137,7 +137,6 @@ auto HASH_TABLE_TYPE::Insert(Transaction *transaction, const KeyType &key, const
   buffer_pool_manager_->UnpinPage(dir_page->GetPageId(), false);
   buffer_pool_manager_->UnpinPage(bucket_page_id, false);
   table_latch_.RUnlock();
-  // unpin operations left to SplitInsert
   return SplitInsert(transaction, key, value);
 }
 
@@ -151,7 +150,6 @@ auto HASH_TABLE_TYPE::SplitInsert(Transaction *transaction, const KeyType &key, 
   // if reach max_depth, return false
   if ((1 << dir_page->GetLocalDepth(split_bucket_idx)) == DIRECTORY_ARRAY_SIZE) {
     assert(buffer_pool_manager_->UnpinPage(dir_page->GetPageId(), false));
-    assert(buffer_pool_manager_->UnpinPage(split_bucket_page_id, false));
     table_latch_.WUnlock();
     return false;
   }
@@ -174,8 +172,8 @@ auto HASH_TABLE_TYPE::SplitInsert(Transaction *transaction, const KeyType &key, 
 
   auto buddy_bucket_idx = dir_page->GetSplitImageIndex(split_bucket_idx);
   page_id_t buddy_bucket_page_id;
-  buffer_pool_manager_->NewPage(&buddy_bucket_page_id);
-  assert(buffer_pool_manager_->UnpinPage(buddy_bucket_page_id, true));
+  Page *buddy_bucket_page = buffer_pool_manager_->NewPage(&buddy_bucket_page_id);
+  // assert(buffer_pool_manager_->UnpinPage(buddy_bucket_page_id, true));
   // modify information of all slots in directory that points to the buddy bucket
   for (int i = buddy_bucket_idx; i >= 0; i -= stride) {
     dir_page->SetBucketPageId(i, buddy_bucket_page_id);
@@ -189,15 +187,18 @@ auto HASH_TABLE_TYPE::SplitInsert(Transaction *transaction, const KeyType &key, 
   Page *split_bucket_page = buffer_pool_manager_->FetchPage(split_bucket_page_id);
   split_bucket_page->WLatch();
   auto split_bucket = reinterpret_cast<HASH_TABLE_BUCKET_TYPE *>(split_bucket_page->GetData());
-  Page *buddy_bucket_page = buffer_pool_manager_->FetchPage(buddy_bucket_page_id);
+  // Page *buddy_bucket_page = buffer_pool_manager_->FetchPage(buddy_bucket_page_id);
   buddy_bucket_page->WLatch();
   auto buddy_bucket = reinterpret_cast<HASH_TABLE_BUCKET_TYPE *>(buddy_bucket_page->GetData());
-  auto num_readable = split_bucket->NumReadable();
-  for (size_t i = 0; i < num_readable; i++) {
-    auto key_at_i = split_bucket->KeyAt(i);
-    if (split_bucket_page_id != KeyToPageId(key_at_i, dir_page)) {
-      assert(buddy_bucket->Insert(key_at_i, split_bucket->ValueAt(i), comparator_));
-      split_bucket->RemoveAt(i);
+  // ! Don't assume it's still full now, just split!
+  for (size_t i = 0; i < BUCKET_ARRAY_SIZE; i++) {
+    if (split_bucket->IsReadable(i)) {
+      auto key_at_i = split_bucket->KeyAt(i);
+      auto target_bucket_page_id = KeyToPageId(key_at_i, dir_page);
+      if (split_bucket_page_id != target_bucket_page_id) {
+        assert(buddy_bucket->Insert(key_at_i, split_bucket->ValueAt(i), comparator_));
+        split_bucket->RemoveAt(i);
+      }
     }
   }
   split_bucket_page->WUnlatch();
@@ -260,17 +261,17 @@ void HASH_TABLE_TYPE::Merge(Transaction *transaction, const KeyType &key, const 
   }
   auto bucket_page_id = dir_page->GetBucketPageId(bucket_idx);
   Page *bucket_page = buffer_pool_manager_->FetchPage(bucket_page_id);
-  bucket_page->WLatch();
+  bucket_page->RLatch();
   auto bucket = reinterpret_cast<HASH_TABLE_BUCKET_TYPE *>(bucket_page->GetData());
   // check if empty now
   if (!bucket->IsEmpty()) {
-    bucket_page->WUnlatch();
-    assert(buffer_pool_manager_->UnpinPage(dir_page->GetPageId(), false));
+    bucket_page->RUnlatch();
     assert(buffer_pool_manager_->UnpinPage(bucket_page_id, false));
+    assert(buffer_pool_manager_->UnpinPage(dir_page->GetPageId(), false));
     table_latch_.WUnlock();
     return;
   }
-  bucket_page->WUnlatch();
+  bucket_page->RUnlatch();
   // delete the empty page
   assert(buffer_pool_manager_->UnpinPage(bucket_page_id, false));
   assert(buffer_pool_manager_->DeletePage(bucket_page_id));

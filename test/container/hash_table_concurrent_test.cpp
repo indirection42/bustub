@@ -42,7 +42,7 @@
 namespace bustub {
 // helper function to launch multiple threads
 template <typename... Args>
-void LaunchParallelTest(uint64_t num_threads, uint64_t txn_id_start, Args &&... args) {
+void LaunchParallelTest(uint64_t num_threads, uint64_t txn_id_start, Args &&...args) {
   std::vector<std::thread> thread_group;
 
   // Launch a group of threads
@@ -411,9 +411,9 @@ void MixTest2Call() {
  * Description: Concurrently insert a set of keys.
  */
 TEST(HashTableConcurrentTest, InsertTest1) {
-  // TEST_TIMEOUT_BEGIN
+  TEST_TIMEOUT_BEGIN
   InsertTest1Call();
-  // TEST_TIMEOUT_FAIL_END(3 * 1000 * 60)
+  TEST_TIMEOUT_FAIL_END(3 * 1000 * 60)
 }
 
 /*
@@ -422,9 +422,9 @@ TEST(HashTableConcurrentTest, InsertTest1) {
  * without overlap.
  */
 TEST(HashTableConcurrentTest, InsertTest2) {
-  // TEST_TIMEOUT_BEGIN
+  TEST_TIMEOUT_BEGIN
   InsertTest2Call();
-  // TEST_TIMEOUT_FAIL_END(3 * 1000 * 60)
+  TEST_TIMEOUT_FAIL_END(3 * 1000 * 60)
 }
 
 /*
@@ -432,9 +432,9 @@ TEST(HashTableConcurrentTest, InsertTest2) {
  * Description: Concurrently delete a set of keys.
  */
 TEST(HashTableConcurrentTest, DeleteTest1) {
-  // TEST_TIMEOUT_BEGIN
+  TEST_TIMEOUT_BEGIN
   DeleteTest1Call();
-  // TEST_TIMEOUT_FAIL_END(3 * 1000 * 60)
+  TEST_TIMEOUT_FAIL_END(3 * 1000 * 60)
 }
 
 /*
@@ -443,9 +443,9 @@ TEST(HashTableConcurrentTest, DeleteTest1) {
  * without overlap.
  */
 TEST(HashTableConcurrentTest, DeleteTest2) {
-  // TEST_TIMEOUT_BEGIN
+  TEST_TIMEOUT_BEGIN
   DeleteTest2Call();
-  // TEST_TIMEOUT_FAIL_END(3 * 1000 * 60)
+  TEST_TIMEOUT_FAIL_END(3 * 1000 * 60)
 }
 
 /*
@@ -456,9 +456,9 @@ TEST(HashTableConcurrentTest, DeleteTest2) {
  * deleted and new keys are added correctly.
  */
 TEST(HashTableConcurrentTest2, MixTest1) {
-  // TEST_TIMEOUT_BEGIN
+  TEST_TIMEOUT_BEGIN
   MixTest1Call();
-  // TEST_TIMEOUT_FAIL_END(3 * 1000 * 120)
+  TEST_TIMEOUT_FAIL_END(3 * 1000 * 120)
 }
 
 /*
@@ -470,9 +470,8 @@ TEST(HashTableConcurrentTest2, MixTest1) {
  * inserted.
  */
 TEST(HashTableConcurrentTest2, MixTest2) {
-  // TEST_TIMEOUT_BEGIN
+  TEST_TIMEOUT_BEGIN
   MixTest2Call();
-  // TEST_TIMEOUT_FAIL_END(3 * 1000 * 120)
+  TEST_TIMEOUT_FAIL_END(3 * 1000 * 120)
 }
-
 }  // namespace bustub
