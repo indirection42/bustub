@@ -28,7 +28,18 @@ HASH_TABLE_TYPE::ExtendibleHashTable(const std::string &name, BufferPoolManager 
                                      const KeyComparator &comparator, HashFunction<KeyType> hash_fn)
     : buffer_pool_manager_(buffer_pool_manager), comparator_(comparator), hash_fn_(std::move(hash_fn)) {
   //  implement me!
-  directory_page_id_ = INVALID_PAGE_ID;
+  // create new directory_page
+  Page *dir_page_raw = buffer_pool_manager_->NewPage(&directory_page_id_);
+  assert(dir_page_raw != nullptr);
+  auto dir_page = reinterpret_cast<HashTableDirectoryPage *>(dir_page_raw->GetData());
+  dir_page->SetPageId(directory_page_id_);
+  // create new bucket_page
+  page_id_t bucket_page_id;
+  Page *bucket_page = buffer_pool_manager_->NewPage(&bucket_page_id);
+  assert(bucket_page != nullptr);
+  dir_page->SetBucketPageId(0, bucket_page_id);
+  assert(buffer_pool_manager_->UnpinPage(directory_page_id_, true));
+  assert(buffer_pool_manager_->UnpinPage(bucket_page_id, true));
 }
 
 /*****************************************************************************
@@ -58,25 +69,15 @@ inline auto HASH_TABLE_TYPE::KeyToPageId(KeyType key, HashTableDirectoryPage *di
 
 template <typename KeyType, typename ValueType, typename KeyComparator>
 auto HASH_TABLE_TYPE::FetchDirectoryPage() -> HashTableDirectoryPage * {
-  std::lock_guard<std::mutex> guard(dir_page_id_m_);
-  if (directory_page_id_ == INVALID_PAGE_ID) {
-    // create new directory_page
-    Page *dir_page_raw = buffer_pool_manager_->NewPage(&directory_page_id_);
-    assert(dir_page_raw != nullptr);
-    auto dir_page = reinterpret_cast<HashTableDirectoryPage *>(dir_page_raw->GetData());
-    dir_page->SetPageId(directory_page_id_);
-    // create new bucket_page
-    page_id_t bucket_page_id;
-    Page *bucket_page = buffer_pool_manager_->NewPage(&bucket_page_id);
-    assert(bucket_page != nullptr);
-    dir_page->SetBucketPageId(0, bucket_page_id);
-    assert(buffer_pool_manager_->UnpinPage(directory_page_id_, true));
-    assert(buffer_pool_manager_->UnpinPage(bucket_page_id, true));
-    return dir_page;
-  }
+  // std::lock_guard<std::mutex> guard(dir_page_id_m_);
+  // // if (directory_page_id_ == INVALID_PAGE_ID) {
+
+  // // }
   Page *page = buffer_pool_manager_->FetchPage(directory_page_id_);
   assert(page != nullptr);
+  page->RLatch();
   auto dir_page = reinterpret_cast<HashTableDirectoryPage *>(page->GetData());
+  page->RUnlatch();
   return dir_page;
 }
 

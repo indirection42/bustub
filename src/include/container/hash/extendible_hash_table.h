@@ -168,7 +168,6 @@ class ExtendibleHashTable {
 
   // Readers includes inserts and removes, writers are splits and merges
   ReaderWriterLatch table_latch_;
-  std::mutex dir_page_id_m_;
   HashFunction<KeyType> hash_fn_;
 };
 
