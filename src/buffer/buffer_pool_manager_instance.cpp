@@ -56,31 +56,25 @@ auto BufferPoolManagerInstance::FlushPgImp(page_id_t page_id) -> bool {
     return false;
   }
   auto &page = pages_[page_table_[page_id]];
-  // lck.unlock();
-  page.WLatch();
   // flush if page is dirty;
   if (page.is_dirty_) {
     // LOG_DEBUG("# Instance %d, Pages: %d, data(write_back):%s\n",instance_index_, page.page_id_,page.data_);
     disk_manager_->WritePage(page_id, page.data_);
     page.is_dirty_ = false;
   }
-  page.WUnlatch();
   return true;
 }
 
 void BufferPoolManagerInstance::FlushAllPgsImp() {
   // You can do it!
-  // if pool_size is small, it's more efficient than querying page_table_ (since the latter requires locking during the
-  // for loop) std::unique_lock lck(latch_);
-  for (size_t i = 0; i < pool_size_; i++) {
-    auto &page = pages_[i];
-    page.WLatch();
-    if (page.page_id_ != INVALID_PAGE_ID && page.is_dirty_) {
+  std::unique_lock lck(latch_);
+  for (auto [page_id, frame_id] : page_table_) {
+    auto &page = pages_[frame_id];
+    if (page.is_dirty_) {
       // LOG_DEBUG("# Instance %d, Pages: %d, data(write_back):%s\n",instance_index_, page.page_id_,page.data_);
-      disk_manager_->WritePage(page.page_id_, page.data_);
+      disk_manager_->WritePage(page_id, page.data_);
       page.is_dirty_ = false;
     }
-    page.WUnlatch();
   }
 }
 
@@ -107,12 +101,10 @@ auto BufferPoolManagerInstance::NewPgImp(page_id_t *page_id) -> Page * {
     page_table_.erase(victim_page_id);
   }
   // reset P's metadata, zero out memory, dirty is true(can be write-back later);
-  // lck.unlock();
   // Allocate (if return nullptr, )
   page_id_t new_page_id = AllocatePage();
   *page_id = new_page_id;
   auto &page = pages_[frame_id];
-  page.WLatch();
   if (page.is_dirty_) {
     // LOG_DEBUG("# Instance %d, Old Page: %d, data(write-back): %s",instance_index_, page.page_id_,page.data_);
     disk_manager_->WritePage(page.page_id_, page.data_);
@@ -124,7 +116,6 @@ auto BufferPoolManagerInstance::NewPgImp(page_id_t *page_id) -> Page * {
   // set pinned, since it a new page, no need to call replacer_->Pin()
   page.pin_count_ = 1;
   page.is_dirty_ = false;
-  page.WUnlatch();
   // Add P to the page table;
   // lck.lock();
   page_table_[new_page_id] = frame_id;
@@ -144,10 +135,7 @@ auto BufferPoolManagerInstance::FetchPgImp(page_id_t page_id) -> Page * {
   if (page_table_.find(page_id) != page_table_.end()) {
     // LOG_DEBUG("# Instance %d, Page %d in buffer pool",instance_index_, page_id);
     frame_id_t frame_id = page_table_[page_id];
-    // lck.unlock();
-    pages_[frame_id].WLatch();
     pages_[frame_id].pin_count_++;
-    pages_[frame_id].WUnlatch();
     replacer_->Pin(frame_id);
     return &pages_[frame_id];
   }
@@ -166,9 +154,7 @@ auto BufferPoolManagerInstance::FetchPgImp(page_id_t page_id) -> Page * {
     // LOG_DEBUG("# Instance %d, Victim Frame %d(Page  %d) from replacer",instance_index_, frame_id,victim_page_id);
     page_table_.erase(victim_page_id);
   }
-  // lck.unlock();
   auto &page = pages_[frame_id];
-  page.WLatch();
   // if R is dirty(from the replacer), write out
   if (page.is_dirty_) {
     //  LOG_DEBUG("#Instance %d, Page: %d, data(write_back): %s",instance_index_,page.page_id_,page.data_);
@@ -181,8 +167,6 @@ auto BufferPoolManagerInstance::FetchPgImp(page_id_t page_id) -> Page * {
   // set pinned, since its new, no need to call replacer_.Pin()
   page.pin_count_ = 1;
   page.is_dirty_ = false;
-  page.WUnlatch();
-  // lck.lock();
   // update page_table_
   page_table_[page_id] = frame_id;
   return &page;
@@ -203,18 +187,12 @@ auto BufferPoolManagerInstance::DeletePgImp(page_id_t page_id) -> bool {
   auto frame_id = page_table_[page_id];
   // lck.unlock();
   auto &page = pages_[frame_id];
-  page.RLatch();
   if (page.pin_count_ > 0) {
-    page.RUnlatch();
     return false;
   }
-  page.RUnlatch();
-  page.WLatch();
   page.ResetMemory();
   page.page_id_ = INVALID_PAGE_ID;
   page.is_dirty_ = false;
-  page.WUnlatch();
-  // lck.lock();
   // TODO(jiyuanz) check if race condition(delete,new,fetch)
   page_table_.erase(page_id);
   DeallocatePage(page_id);
@@ -228,23 +206,17 @@ auto BufferPoolManagerInstance::UnpinPgImp(page_id_t page_id, bool is_dirty) -> 
     return false;
   }
   frame_id_t frame_id = page_table_[page_id];
-  // lck.unlock();
   auto &page = pages_[frame_id];
-  page.RLatch();
   if (pages_[frame_id].pin_count_ <= 0) {
     // LOG_DEBUG("#Instance %d, Cannot unpin Page: %d",instance_index_, page_id);
-    page.RUnlatch();
     return false;
   }
-  page.RUnlatch();
-  page.WLatch();
   page.is_dirty_ |= is_dirty;
   page.pin_count_--;
   if (page.pin_count_ == 0) {
     // LOG_DEBUG("#Instance %d,  Unpin Page: %d in replacer",instance_index_, page_id);
     replacer_->Unpin(frame_id);
   }
-  page.WUnlatch();
   // LOG_DEBUG("#Instance %d, page_table size: %lu",instance_index_, page_table_.size());
   return true;
 }
