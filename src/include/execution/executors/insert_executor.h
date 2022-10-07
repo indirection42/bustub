@@ -38,7 +38,6 @@ class InsertExecutor : public AbstractExecutor {
    */
   InsertExecutor(ExecutorContext *exec_ctx, const InsertPlanNode *plan,
                  std::unique_ptr<AbstractExecutor> &&child_executor);
-
   /** Initialize the insert */
   void Init() override;
 
@@ -52,13 +51,17 @@ class InsertExecutor : public AbstractExecutor {
    * NOTE: InsertExecutor::Next() does not use the `rid` out-parameter.
    */
   auto Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool override;
-
   /** @return The output schema for the insert */
   auto GetOutputSchema() -> const Schema * override { return plan_->OutputSchema(); };
+
+  void InsertIntoTableAndUpdateIndex(Tuple tuple);
 
  private:
   /** The insert plan node to be executed*/
   const InsertPlanNode *plan_;
+  TableInfo *table_info_{nullptr};
+  TableHeap *table_heap_{nullptr};
+  std::unique_ptr<AbstractExecutor> child_executor_;
 };
 
 }  // namespace bustub
