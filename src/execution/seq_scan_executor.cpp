@@ -38,8 +38,9 @@ auto SeqScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
   }
   // do projection
   std::vector<Value> values;
-  for (size_t i = 0; i < output_schema->GetColumnCount(); i++) {
-    values.emplace_back(output_schema->GetColumn(i).GetExpr()->Evaluate(&*table_iter_, output_schema));
+  values.reserve(output_schema->GetColumnCount());
+  for (auto &col : output_schema->GetColumns()) {
+    values.emplace_back(col.GetExpr()->Evaluate(&*table_iter_, table_schema));
   }
   *tuple = Tuple(values, output_schema);
   *rid = table_iter_->GetRid();
