@@ -28,7 +28,7 @@ auto DeleteExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
   RID child_rid;
   while (child_executor_->Next(&child_tuple, &child_rid)) {
     // update table
-    table_info_->table_->ApplyDelete(child_rid, exec_ctx_->GetTransaction());
+    table_info_->table_->MarkDelete(child_rid, exec_ctx_->GetTransaction());
     // update indexes
     for (auto &index_info : exec_ctx_->GetCatalog()->GetTableIndexes((table_info_->name_))) {
       index_info->index_->DeleteEntry(
