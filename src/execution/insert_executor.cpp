@@ -43,20 +43,11 @@ auto InsertExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
       InsertIntoTableAndUpdateIndex(Tuple(values, &table_info_->schema_));
     }
   } else {
-    std::vector<Tuple> child_result_set;
     child_executor_->Init();
-    try {
-      Tuple tuple;
-      RID rid;
-      while (child_executor_->Next(&tuple, &rid)) {
-        child_result_set.push_back(tuple);
-      }
-    } catch (Exception &e) {
-      throw e;
-      return false;
-    }
-    for (auto &child_tuple : child_result_set) {
-      InsertIntoTableAndUpdateIndex(child_tuple);
+    Tuple tuple;
+    RID rid;
+    while (child_executor_->Next(&tuple, &rid)) {
+      InsertIntoTableAndUpdateIndex(tuple);
     }
   }
   return false;
