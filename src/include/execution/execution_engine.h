@@ -65,11 +65,11 @@ class ExecutionEngine {
         }
       }
     } catch (Exception &e) {
-      exec_ctx->GetTransaction()->SetState(TransactionState::ABORTED);
-      throw e;
       // TODO(student): handle exceptions
+      txn_mgr_->Abort(txn);
+      throw e;
+      return false;
     }
-
     return true;
   }
 

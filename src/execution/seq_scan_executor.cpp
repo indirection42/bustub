@@ -23,18 +23,32 @@ void SeqScanExecutor::Init() {
 }
 
 auto SeqScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
-  if (table_iter_ == table_heap_->End()) {
-    return false;
-  }
   const auto *predicate = plan_->GetPredicate();
   const auto *table_schema = &exec_ctx_->GetCatalog()->GetTable(plan_->GetTableOid())->schema_;
   const auto *output_schema = plan_->OutputSchema();
-  // skip the unsatisfied tuple
-  while (predicate != nullptr && !predicate->Evaluate(&*table_iter_, table_schema).GetAs<bool>()) {
-    ++table_iter_;
-    if (table_iter_ == table_heap_->End()) {
-      return false;
+  // get satisfied tuple
+  for (; table_iter_ != table_heap_->End(); ++table_iter_) {
+    switch (exec_ctx_->GetTransaction()->GetIsolationLevel()) {
+      case IsolationLevel::READ_UNCOMMITTED:
+        // no shared lock
+        break;
+      case IsolationLevel::READ_COMMITTED:
+      case IsolationLevel::REPEATABLE_READ:
+        exec_ctx_->GetLockManager()->LockShared(exec_ctx_->GetTransaction(), table_iter_->GetRid());
     }
+    if (predicate == nullptr || predicate->Evaluate(&*table_iter_, table_schema).GetAs<bool>()) {
+      // READ_COMMITTED release ShareLock after use
+      if (exec_ctx_->GetTransaction()->GetIsolationLevel() == IsolationLevel::READ_COMMITTED) {
+        exec_ctx_->GetLockManager()->Unlock(exec_ctx_->GetTransaction(), table_iter_->GetRid());
+      }
+      break;
+    }
+    if (exec_ctx_->GetTransaction()->GetIsolationLevel() == IsolationLevel::READ_COMMITTED) {
+      exec_ctx_->GetLockManager()->Unlock(exec_ctx_->GetTransaction(), table_iter_->GetRid());
+    }
+  }
+  if (table_iter_ == table_heap_->End()) {
+    return false;
   }
   // do projection
   std::vector<Value> values;
@@ -44,6 +58,7 @@ auto SeqScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
   }
   *tuple = Tuple(values, output_schema);
   *rid = table_iter_->GetRid();
+  exec_ctx_->GetLockManager()->Unlock(exec_ctx_->GetTransaction(), table_iter_->GetRid());
   ++table_iter_;
   return true;
 }

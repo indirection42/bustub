@@ -29,8 +29,12 @@ void InsertExecutor::InsertIntoTableAndUpdateIndex(Tuple tuple) {
   if (!table_heap_->InsertTuple(tuple, &inserted_rid, exec_ctx_->GetTransaction())) {
     throw Exception(ExceptionType::OUT_OF_MEMORY, "InsertExecutor: no enough space");
   }
-
+  // TableWriteSet already get updated in TableHeap::InsertTuple
   for (const auto &index_info : exec_ctx_->GetCatalog()->GetTableIndexes(table_info_->name_)) {
+    // Update IndexWriteSet
+    exec_ctx_->GetTransaction()->GetIndexWriteSet()->emplace_back(
+        IndexWriteRecord(inserted_rid, table_info_->oid_, WType::INSERT, tuple, Tuple{}, index_info->index_oid_,
+                         exec_ctx_->GetCatalog()));
     index_info->index_->InsertEntry(
         tuple.KeyFromTuple(table_info_->schema_, index_info->key_schema_, index_info->index_->GetKeyAttrs()),
         inserted_rid, exec_ctx_->GetTransaction());

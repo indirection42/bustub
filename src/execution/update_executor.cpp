@@ -26,9 +26,23 @@ auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
   Tuple child_tuple;
   RID child_rid;
   while (child_executor_->Next(&child_tuple, &child_rid)) {
+    switch (exec_ctx_->GetTransaction()->GetIsolationLevel()) {
+      case IsolationLevel::READ_UNCOMMITTED:
+      case IsolationLevel::READ_COMMITTED:
+        exec_ctx_->GetLockManager()->LockExclusive(exec_ctx_->GetTransaction(), child_rid);
+        break;
+      case IsolationLevel::REPEATABLE_READ:
+        exec_ctx_->GetLockManager()->LockUpgrade(exec_ctx_->GetTransaction(), child_rid);
+        break;
+    }
     Tuple updated_tuple = GenerateUpdatedTuple(child_tuple);
+    // TableWriteSet already get updated in TableHeap::UpdateTuple
     table_info_->table_->UpdateTuple(updated_tuple, child_rid, exec_ctx_->GetTransaction());
     for (const auto &index_info : exec_ctx_->GetCatalog()->GetTableIndexes(table_info_->name_)) {
+      // update IndexWriteSet
+      exec_ctx_->GetTransaction()->GetIndexWriteSet()->emplace_back(
+          IndexWriteRecord(child_rid, table_info_->oid_, WType::UPDATE, updated_tuple, child_tuple,
+                           index_info->index_oid_, exec_ctx_->GetCatalog()));
       index_info->index_->DeleteEntry(
           child_tuple.KeyFromTuple(table_info_->schema_, index_info->key_schema_, index_info->index_->GetKeyAttrs()),
           child_rid, exec_ctx_->GetTransaction());
