@@ -105,7 +105,7 @@ class LockManager {
   auto Unlock(Transaction *txn, const RID &rid) -> bool;
 
  private:
-  bool AddToQueueAndCheckOlder(LockRequestQueue *lrq, Transaction *txn, LockMode request_lock_mode);
+  bool CheckOlder(LockRequestQueue *lrq, Transaction *txn, LockMode request_lock_mode);
   std::mutex latch_;
 
   /** Lock table for lock requests. */
