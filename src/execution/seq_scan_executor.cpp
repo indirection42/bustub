@@ -58,7 +58,6 @@ auto SeqScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
   }
   *tuple = Tuple(values, output_schema);
   *rid = table_iter_->GetRid();
-  exec_ctx_->GetLockManager()->Unlock(exec_ctx_->GetTransaction(), table_iter_->GetRid());
   ++table_iter_;
   return true;
 }
