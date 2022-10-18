@@ -19,31 +19,35 @@ bool LockManager::CheckOlder(LockRequestQueue *lrq, Transaction *txn, LockMode r
   auto lrq_iter = lrq->request_queue_.begin();
   // check if already in lrq and check if has older writer
   bool has_older_request_can_block_me = false;
+  bool has_wound = false;
   while (lrq_iter != lrq->request_queue_.end() &&
          !(lrq_iter->txn_id_ == txn->GetTransactionId() && lrq_iter->lock_mode_ == request_lock_mode)) {
-    // older writer block newer reader&writer
+    // older writer block newer reader&writer, older reader block newer writer
     if (lrq_iter->lock_mode_ == LockMode::EXCLUSIVE ||
         (lrq_iter->lock_mode_ == LockMode::SHARED && request_lock_mode == LockMode::EXCLUSIVE)) {
       // wound
       if (txn->GetTransactionId() < lrq_iter->txn_id_) {
-        // TODO(jiyuanz) should erase all LR that belongs to that txn?
-        // lrq_iter = lrq->request_queue_.erase(lrq_iter);
-        auto wound_txn = TransactionManager::GetTransaction(lrq_iter->txn_id_);
+        auto wound_txn_id = lrq_iter->txn_id_;
+        auto wound_txn = TransactionManager::GetTransaction(wound_txn_id);
+        // save this lrq iter
+        lrq_iter = lrq->request_queue_.erase(lrq_iter);
+        // remove all wounded lrs in all lrqs
+        for (auto &lr_wound_lrq : lock_table_) {
+          lr_wound_lrq.second.request_queue_.remove_if(
+              [wound_txn_id](LockRequest lr) { return lr.txn_id_ == wound_txn_id; });
+        }
         wound_txn->SetState(TransactionState::ABORTED);
-        // auto wound_txn_id=lrq_iter->txn_id_;
-        // for (auto &[rid,wound_lrq]:lock_table_){
-        //   wound_lrq.request_queue_.remove_if([wound_txn_id](LockRequest lr){return lr.txn_id_==wound_txn_id;});
-        // }
+        has_wound = true;
+      } else {
+        has_older_request_can_block_me = true;
+        ++lrq_iter;
       }
-      // wait
-      // else {
-      // TODO(jiyuanz) break or not both seems work(wound once seems more efficient)
-      has_older_request_can_block_me = true;
-      ++lrq_iter;
-      // }
     } else {
       ++lrq_iter;
     }
+  }
+  if (has_wound) {
+    lrq->cv_.notify_all();
   }
   return has_older_request_can_block_me;
 }
@@ -62,6 +66,7 @@ auto LockManager::LockShared(Transaction *txn, const RID &rid) -> bool {
   LockRequestQueue &lrq = lock_table_[rid];
   switch (txn->GetIsolationLevel()) {
     case IsolationLevel::READ_UNCOMMITTED:
+      txn->SetState(TransactionState::ABORTED);
       throw TransactionAbortException(txn->GetTransactionId(), AbortReason::LOCKSHARED_ON_READ_UNCOMMITTED);
       return false;
     case IsolationLevel::READ_COMMITTED:
@@ -74,18 +79,12 @@ auto LockManager::LockShared(Transaction *txn, const RID &rid) -> bool {
         lr = lrq.request_queue_.end();
         --lr;
       }
-      // CheckOlder
       // older writer block
       while (CheckOlder(&lrq, txn, LockMode::SHARED)) {
-        // TODO(jiyuanz): deadlock prevention, wound-wait
         lrq.cv_.wait(guard);
-        // if (std::find_if(lrq.request_queue_.begin(), lrq.request_queue_.end(),
-        //                      [txn](LockRequest lr) { return lr.txn_id_ == txn->GetTransactionId(); }) ==
-        //                      lrq.request_queue_.end()) {
-        //   txn->SetState(TransactionState::ABORTED);
-        //   throw TransactionAbortException(txn->GetTransactionId(), AbortReason::DEADLOCK);
-        //   return false;
-        // }
+        if (txn->GetState() == TransactionState::ABORTED) {
+          return false;
+        }
       }
       // update lrq
       lr->granted_ = true;
@@ -123,13 +122,9 @@ auto LockManager::LockExclusive(Transaction *txn, const RID &rid) -> bool {
       }
       while (CheckOlder(&lrq, txn, LockMode::EXCLUSIVE)) {
         lrq.cv_.wait(guard);
-        // if (std::find_if(lrq.request_queue_.begin(), lrq.request_queue_.end(),
-        //                      [txn](LockRequest lr) { return lr.txn_id_ == txn->GetTransactionId(); })  ==
-        //                      lrq.request_queue_.end()) {
-        //   txn->SetState(TransactionState::ABORTED);
-        //   throw TransactionAbortException(txn->GetTransactionId(), AbortReason::DEADLOCK);
-        //   return false;
-        // }
+        if (txn->GetState() == TransactionState::ABORTED) {
+          return false;
+        }
       }
       // update lrq
       lr->granted_ = true;
@@ -164,7 +159,6 @@ auto LockManager::LockUpgrade(Transaction *txn, const RID &rid) -> bool {
         throw TransactionAbortException(txn->GetTransactionId(), AbortReason::UPGRADE_CONFLICT);
         return false;
       }
-      // TODO(jiyuanz) just get first lr?
       auto lr = std::find_if(lrq.request_queue_.begin(), lrq.request_queue_.end(),
                              [txn](LockRequest lr) { return lr.txn_id_ == txn->GetTransactionId(); });
       // no shared lock request in queue
@@ -183,14 +177,9 @@ auto LockManager::LockUpgrade(Transaction *txn, const RID &rid) -> bool {
       // wait older reader (cannot have no older writer, because they are blocked when shared_lock has granted before )
       while (CheckOlder(&lrq, txn, LockMode::EXCLUSIVE)) {
         lrq.cv_.wait(guard);
-        // TODO(jiyuanz) need remove in other
-        // if (std::find_if(lrq.request_queue_.begin(), lrq.request_queue_.end(),
-        //                      [txn](LockRequest lr) { return lr.txn_id_ == txn->GetTransactionId(); })  ==
-        //                      lrq.request_queue_.end()) {
-        //   txn->SetState(TransactionState::ABORTED);
-        //   throw TransactionAbortException(txn->GetTransactionId(), AbortReason::DEADLOCK);
-        //   return false;
-        // }
+        if (txn->GetState() == TransactionState::ABORTED) {
+          return false;
+        }
       }
       txn->GetSharedLockSet()->erase(rid);
       txn->GetExclusiveLockSet()->emplace(rid);
@@ -204,14 +193,10 @@ auto LockManager::LockUpgrade(Transaction *txn, const RID &rid) -> bool {
 auto LockManager::Unlock(Transaction *txn, const RID &rid) -> bool {
   std::unique_lock<std::mutex> guard(latch_);
   LockRequestQueue &lrq = lock_table_[rid];
-  if (txn->GetState() == TransactionState::GROWING) {
-    txn->SetState(TransactionState::SHRINKING);
-  }
   auto lrq_iter = lrq.request_queue_.begin();
   while (lrq_iter != lrq.request_queue_.end() && lrq_iter->txn_id_ != txn->GetTransactionId()) {
     ++lrq_iter;
   }
-  // TODO(jiyuanz) permit unlock on that unlocked already?
   if (lrq_iter == lrq.request_queue_.end() || !lrq_iter->granted_) {
     txn->SetState(TransactionState::ABORTED);
     // throw unlock on not lock
